@@ -11,6 +11,7 @@ pub struct Span {
 }
 
 impl Span {
+    /// Create the half-open byte range `start..end`.
     #[must_use]
     pub const fn new(start: usize, end: usize) -> Self {
         Self { start, end }
@@ -33,11 +34,13 @@ impl Span {
         }
     }
 
+    /// Return the length of this span in bytes.
     #[must_use]
     pub const fn len(self) -> usize {
         self.end - self.start
     }
 
+    /// Return whether this span contains no bytes.
     #[must_use]
     pub const fn is_empty(self) -> bool {
         self.start == self.end

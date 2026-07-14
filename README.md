@@ -2,161 +2,147 @@
 
 [![Crates.io](https://img.shields.io/crates/v/openscad-rs.svg)](https://crates.io/crates/openscad-rs)
 [![docs.rs](https://docs.rs/openscad-rs/badge.svg)](https://docs.rs/openscad-rs)
-[![CI](https://github.com/ierror/openscad-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ierror/openscad-rs/actions/workflows/ci.yml)
+[![CI](https://github.com/timschmidt/openscad-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/timschmidt/openscad-rs/actions/workflows/ci.yml)
 
-A [OpenSCAD](https://openscad.org) parser library for Rust.
+`openscad-rs` parses OpenSCAD source into a typed Rust syntax tree. It is a
+parser rather than a geometry evaluator: downstream compilers, formatters,
+linters, and language servers can interpret the resulting AST for their own
+purposes.
 
-Parses `.scad` source files into a well-typed AST suitable for building compilers, formatters, linters, and language servers.
+The crate provides a `logos`-based lexer, byte spans on every AST node,
+structured parse errors, a recursion-depth guard, and reusable read-only AST
+traversal. It forbids unsafe Rust.
 
-## Features
+## Quick start
 
-- **Fast** — [logos](https://github.com/maciejhirsz/logos)-based zero-copy lexer compiles to jump tables
-- **Complete** — Covers the full OpenSCAD language grammar (98.5% pass rate on OpenSCAD's own test suite)
-- **Typed AST** — Every node carries source spans for precise error reporting and tooling
-- **Compiler-ready** — Designed as a foundation for downstream compiler applications
-- **Safe** — `#[forbid(unsafe_code)]`, pedantic clippy, comprehensive tests
-- **Zero dependencies at runtime** — Only `logos`, `miette`, and `thiserror`
-
-## Quick Start
-
-Add to your `Cargo.toml`:
+Add the crate to a project:
 
 ```toml
 [dependencies]
-openscad-rs = "0.1.0"
+openscad-rs = "0.1"
 ```
 
-Parse a source file:
+Parse source and inspect its statements:
 
 ```rust
-use openscad_rs::{parse, Statement, ExprKind};
+use openscad_rs::{Statement, parse};
 
 let source = r#"
     module rounded_box(size = [10, 10, 10], r = 1) {
-        if (r > 0) {
-            minkowski() {
-                cube(size - [2*r, 2*r, 2*r]);
-                sphere(r = r, $fn = 20);
-            }
-        } else {
-            cube(size);
+        minkowski() {
+            cube(size - [2*r, 2*r, 2*r]);
+            sphere(r = r, $fn = 20);
         }
     }
 
     rounded_box(size = [30, 20, 10], r = 2);
 "#;
 
-let ast = parse(source).expect("parse error");
+let file = parse(source)?;
 
-for stmt in &ast.statements {
-    match stmt {
+for statement in &file.statements {
+    match statement {
         Statement::ModuleDefinition { name, params, .. } => {
-            println!("module {name}({} params)", params.len());
+            println!("module {name} has {} parameters", params.len());
         }
         Statement::ModuleInstantiation { name, args, .. } => {
-            println!("call {name}({} args)", args.len());
+            println!("call to {name} has {} arguments", args.len());
         }
         _ => {}
     }
 }
-// Output:
-// module rounded_box(2 params)
-// call rounded_box(2 args)
+
+# Ok::<(), openscad_rs::ParseError>(())
 ```
 
-## Architecture
+## Core API
 
-```
-src/
-├── lib.rs       # Public API: parse(), re-exports
-├── token.rs     # Token enum (logos-generated)
-├── lexer.rs     # Tokenizer: source → tokens with spans
-├── ast.rs       # AST node types: Expr, Statement, etc.
-├── parser.rs    # Recursive-descent parser
-├── span.rs      # Source location tracking
-├── error.rs     # ParseError with miette diagnostics
-└── visit.rs     # AST visitor trait
-```
+- [`parse`](https://docs.rs/openscad-rs/latest/openscad_rs/fn.parse.html)
+  lexes and parses one source string into a `SourceFile`.
+- `Statement` represents assignments, definitions, module calls, conditionals,
+  blocks, and `include`/`use` directives.
+- `Expr` and `ExprKind` represent literals, operators, calls, indexing, ranges,
+  anonymous functions, and list comprehensions.
+- `Span` is a half-open byte range into the original UTF-8 source.
+- `ParseError` reports invalid tokens, unexpected syntax, incomplete input, and
+  excessive nesting.
+- `Visitor` provides read-only recursive traversal. Its `walk_*` helpers let an
+  override inspect a node and then continue through that node's children.
 
-## Supported Language Features
-
-| Feature                                                            | Status |
-| ------------------------------------------------------------------ | ------ |
-| Literals (numbers, hex, strings, booleans, undef)                  | ✅     |
-| String escape sequences (`\n`, `\t`, `\xHH`, `\uHHHH`, `\UHHHHHH`) | ✅     |
-| Variables & assignments                                            | ✅     |
-| Full operator precedence (17 levels)                               | ✅     |
-| Ternary expressions                                                | ✅     |
-| Vectors & ranges                                                   | ✅     |
-| Module definitions & instantiation                                 | ✅     |
-| Function definitions                                               | ✅     |
-| Anonymous functions                                                | ✅     |
-| `if`/`else` (statement & expression)                               | ✅     |
-| `for`, `let`, `each` list comprehensions                           | ✅     |
-| `echo()`, `assert()`                                               | ✅     |
-| `include <file>`, `use <file>`                                     | ✅     |
-| Modifier prefixes (`!`, `#`, `%`, `*`)                             | ✅     |
-| Comments (`//`, `/* */`)                                           | ✅     |
-| Member access (`obj.x`) & indexing (`v[i]`)                        | ✅     |
-| Bitwise operators (`&`, `\|`, `<<`, `>>`, `~`)                     | ✅     |
-| Exponentiation (`^`)                                               | ✅     |
-| Named & positional arguments                                       | ✅     |
-| Trailing commas                                                    | ✅     |
-
-## AST Visitor
-
-Traverse the AST with the built-in visitor trait:
+For example, count nested module calls while preserving default traversal:
 
 ```rust
-use openscad_rs::{parse, Visitor, Expr, ExprKind, Statement};
+use openscad_rs::{Statement, Visitor, parse, walk_statement};
 
 struct ModuleCounter(usize);
 
 impl Visitor for ModuleCounter {
-    fn visit_statement(&mut self, stmt: &Statement) {
-        if matches!(stmt, Statement::ModuleInstantiation { .. }) {
+    fn visit_statement(&mut self, statement: &Statement) {
+        if matches!(statement, Statement::ModuleInstantiation { .. }) {
             self.0 += 1;
         }
-        // Call default implementation to recurse into children
-        openscad_rs::visit::Visitor::visit_statement(self, stmt);
+        walk_statement(self, statement);
     }
 }
 
-let ast = parse("union() { cube(5); sphere(3); }").unwrap();
+let file = parse("union() { cube(5); sphere(3); }")?;
 let mut counter = ModuleCounter(0);
-counter.visit_file(&ast);
-assert_eq!(counter.0, 3); // union, cube, sphere
+counter.visit_file(&file);
+assert_eq!(counter.0, 3);
+
+# Ok::<(), openscad_rs::ParseError>(())
 ```
 
-## Compatibility
+## Language coverage and limits
 
-The parser is validated against the [OpenSCAD test suite](https://github.com/openscad/openscad/tree/master/tests/data/scad) (523 `.scad` files), achieving a **98.5% pass rate**.
+The parser recognizes OpenSCAD literals, expressions and precedence, vectors,
+ranges, list comprehensions, assignments, user-defined functions and modules,
+child statements, modifiers, and `include`/`use` syntax. String escape handling
+and source locations are retained in the AST.
 
-To run the compatibility tests:
+Parsing is intentionally syntactic. The crate does not resolve included files,
+evaluate expressions, type-check programs, or construct geometry. AST strings
+and expression boxes are owned; this favors a straightforward downstream API
+over arena allocation or a fully zero-copy tree.
+
+An optional compatibility test runs against the vendored upstream OpenSCAD
+fixture corpus. That corpus also contains experimental and deliberately invalid
+inputs, so the test enforces a regression floor rather than claiming universal
+language acceptance.
+
+## Development
+
+```bash
+cargo fmt --all --check
+cargo test --all-targets
+cargo clippy --all-targets -- -D warnings
+cargo bench
+```
+
+To exercise the upstream fixtures and the command-line comparison benchmark:
 
 ```bash
 git submodule update --init
 cargo test --test openscad_compat -- --nocapture
+./benches/compare_openscad.sh
 ```
 
-## Benchmarking
+The comparison script additionally requires the `openscad` executable and
+Python 3. Its numbers are local measurements, not a stable performance claim.
 
-```bash
-cargo bench
-```
+## References
 
-## Design Decisions
+- [OpenSCAD documentation and language reference](https://openscad.org/documentation.html)
+- [OpenSCAD source grammar and test corpus](https://github.com/openscad/openscad)
+- [`logos` lexer documentation](https://docs.rs/logos)
+- [`miette` diagnostic documentation](https://docs.rs/miette)
+- [`thiserror` derive documentation](https://docs.rs/thiserror)
 
-- **Parser only** — No semantic analysis, type checking, or evaluation. This is purely syntactic parsing. Downstream crates handle the rest.
-- **`include`/`use` are AST nodes** — We parse the directive but don't resolve or load files. That's the compiler's responsibility.
-- **Owned AST** — Uses `String` and `Box<Expr>` for simplicity. Arena allocation can be added later for zero-copy parsing.
-- **Lossless source locations** — Every AST node carries a `Span` with byte offsets for precise source mapping.
-- **Recursion depth guard** — Prevents stack overflow on adversarial/deeply nested inputs.
-
-## Contact
-
-[@boerni@chaos.social](https://chaos.social/@boerni)
+Related geometry work: [csgrs](https://github.com/timschmidt/csgrs) turns
+programmatic inputs into constructive-solid-geometry meshes, while
+[synaps-cad](https://github.com/timschmidt/synaps-cad) builds an interactive CAD
+application around OpenSCAD-like source and `csgrs`.
 
 ## License
 
-GPL v3
+GPL-3.0-or-later. See [LICENSE](LICENSE).

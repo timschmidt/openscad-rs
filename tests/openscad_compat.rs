@@ -4,7 +4,7 @@ use std::path::Path;
 
 #[test]
 fn parse_openscad_test_files() {
-    // Use a thread with a larger stack to handle deeply nested files in debug mode
+    // Debug builds need more stack for deeply nested fixture files.
     let builder = std::thread::Builder::new().stack_size(8 * 1024 * 1024);
     let handler = builder
         .spawn(run_compat_tests)
@@ -71,8 +71,8 @@ fn run_compat_tests() {
         }
     }
 
-    // We expect a high pass rate but don't fail the test for now —
-    // some files may use experimental features or intentionally invalid syntax.
+    // The upstream corpus includes experimental and intentionally invalid syntax,
+    // so this guards against broad regressions rather than requiring every file.
     assert!(
         f64::from(passed) / f64::from(total) > 0.5,
         "Pass rate too low: {passed}/{total}"

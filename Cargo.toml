@@ -35,11 +35,11 @@ pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 too_many_lines = "allow"
 
-# The profile that 'dist' will build with
+# Release profile used by `dist`.
 [profile.dist]
 inherits = "release"
 lto = "thin"
 
-# Run clippy and tests before cargo-release creates a version bump commit
+# Check lints and tests before `cargo-release` creates a version-bump commit.
 [package.metadata.release]
 pre-release-hook = ["cargo", "clippy", "--", "-D", "warnings"]

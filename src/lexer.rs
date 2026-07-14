@@ -127,9 +127,7 @@ mod tests {
     #[test]
     fn test_comments_skipped() {
         let tokens = lex("x = 1; // comment\ny = /* block */ 2;");
-        let count = tokens.len();
-        // Should see: Identifier, =, 1, ;, Identifier, =, 2, ;
-        assert_eq!(count, 8);
+        assert_eq!(tokens.len(), 8);
     }
 
     #[test]

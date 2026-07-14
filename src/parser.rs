@@ -388,7 +388,7 @@ impl<'src> Parser<'src> {
         })
     }
 
-    /// Check if a `*` is being used as a modifier (followed by an identifier or another modifier)
+    /// Check whether `*` starts a modifier-prefixed statement.
     fn is_modifier_star(&self) -> bool {
         if self.pos + 1 < self.tokens.len() {
             matches!(
@@ -410,7 +410,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    /// Parse child body: either `;` (no children), a single statement, or `{ ... }`
+    /// Parse `;`, a single child statement, or a braced child block.
     fn parse_child_body(&mut self) -> ParseResult<Vec<Statement>> {
         match self.peek() {
             Some(Token::Semicolon) => {
@@ -1185,7 +1185,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    /// Parse body of a list comprehension element (could be another LC element or an expression)
+    /// Parse a nested list-comprehension element or its result expression.
     fn parse_lc_body(&mut self) -> ParseResult<Expr> {
         if matches!(
             self.peek(),
@@ -1390,7 +1390,7 @@ mod tests {
         let file = parse_ok("x = 1 + 2 * 3;");
         match &file.statements[0] {
             Statement::Assignment { expr, .. } => {
-                // Should be Add(1, Mul(2, 3))
+                // Multiplication binds more tightly than addition.
                 match &expr.kind {
                     ExprKind::BinaryOp {
                         op: BinaryOp::Add,

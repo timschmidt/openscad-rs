@@ -21,7 +21,7 @@
 //! println!("Parsed {} statements", ast.statements.len());
 //! ```
 
-// Suppress false positive from thiserror/miette derive macros
+// Derive expansion assigns diagnostic fields that user-written code does not read.
 #![allow(unused_assignments)]
 
 pub mod ast;
@@ -32,11 +32,10 @@ pub mod span;
 pub mod token;
 pub mod visit;
 
-// Re-exports for convenience
 pub use ast::{
     Argument, BinaryOp, Expr, ExprKind, Modifiers, Parameter, SourceFile, Statement, UnaryOp,
 };
 pub use error::{ParseError, ParseResult};
 pub use parser::parse;
 pub use span::Span;
-pub use visit::Visitor;
+pub use visit::{Visitor, walk_expr, walk_file, walk_statement};

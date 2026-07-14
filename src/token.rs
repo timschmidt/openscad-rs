@@ -193,8 +193,7 @@ pub enum Token {
 }
 
 impl Token {
-    /// Returns the identifier string from the source if this is an `Identifier` token.
-    /// For use after matching — caller should pass the corresponding slice.
+    /// Return whether this token is a reserved `OpenSCAD` keyword.
     #[must_use]
     pub const fn is_keyword(&self) -> bool {
         matches!(

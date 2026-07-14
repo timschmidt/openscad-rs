@@ -37,7 +37,7 @@ difference() {
 }
 ";
 
-/// Load all .scad files from the `OpenSCAD` test suite
+/// Load every `.scad` file from the vendored `OpenSCAD` test suite.
 #[allow(clippy::cast_precision_loss)]
 fn load_test_suite() -> Vec<(String, String)> {
     let test_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -104,7 +104,7 @@ fn bench_parse(c: &mut Criterion) {
 
     // ── Find largest files for individual benchmarks ────────────
     let mut by_size: Vec<_> = files.iter().collect();
-    by_size.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+    by_size.sort_by_key(|entry| std::cmp::Reverse(entry.1.len()));
     for (name, source) in by_size.iter().take(3) {
         c.bench_function(&format!("parse_largest_{name}_{}b", source.len()), |b| {
             b.iter(|| parse(black_box(source)));

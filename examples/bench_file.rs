@@ -10,7 +10,7 @@ fn main() {
     let source = String::from_utf8_lossy(&bytes);
     let size = source.len();
 
-    // Warmup
+    // Warm the parser and allocator before timing.
     for _ in 0..3 {
         let _ = openscad_rs::parse(&source);
     }
