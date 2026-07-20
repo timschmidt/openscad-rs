@@ -1,3 +1,5 @@
+use hyperreal::Real;
+
 /// Token types for the `OpenSCAD` lexer.
 ///
 /// Matches the full grammar defined in the official `OpenSCAD` `lexer.l` and `parser.y`.
@@ -58,18 +60,57 @@ fn parse_string(lex: &mut logos::Lexer<'_, Token>) -> String {
 }
 
 #[allow(clippy::needless_pass_by_ref_mut)] // Required by logos callback signature
-fn parse_number(lex: &mut logos::Lexer<'_, Token>) -> f64 {
-    lex.slice().parse().unwrap_or(0.0)
+fn parse_number(lex: &mut logos::Lexer<'_, Token>) -> Real {
+    fn parse_mantissa(source: &str) -> Real {
+        let normalized;
+        let source = if source.starts_with('.') {
+            normalized = format!("0{source}");
+            &normalized
+        } else if source.ends_with('.') {
+            normalized = format!("{source}0");
+            &normalized
+        } else {
+            source
+        };
+        source
+            .parse()
+            .expect("the numeric token regex accepts exact decimal literals")
+    }
+
+    let source = lex.slice();
+    let Some((mantissa, exponent)) = source.split_once('e').or_else(|| source.split_once('E'))
+    else {
+        return parse_mantissa(source);
+    };
+
+    let mantissa = parse_mantissa(mantissa);
+    let exponent = exponent.strip_prefix('+').unwrap_or(exponent);
+    let exponent: Real = exponent
+        .parse()
+        .expect("the numeric token regex accepts integer exponents");
+    let scale = Real::from(10_u8)
+        .pow(exponent)
+        .expect("ten raised to an integer exponent is a real number");
+    mantissa * scale
 }
 
 #[allow(clippy::needless_pass_by_ref_mut)] // Required by logos callback signature
-#[allow(clippy::cast_precision_loss)] // Hex values in OpenSCAD are inherently approximate as f64
-fn parse_hex(lex: &mut logos::Lexer<'_, Token>) -> f64 {
-    let s = lex.slice();
-    u64::from_str_radix(&s[2..], 16).unwrap_or(0) as f64
+fn parse_hex(lex: &mut logos::Lexer<'_, Token>) -> Real {
+    lex.slice()[2..].bytes().fold(Real::zero(), |value, digit| {
+        let digit = match digit {
+            b'0'..=b'9' => digit - b'0',
+            b'a'..=b'f' => digit - b'a' + 10,
+            b'A'..=b'F' => digit - b'A' + 10,
+            _ => unreachable!("the hexadecimal token regex accepts only hexadecimal digits"),
+        };
+        value * Real::from(16_u8) + Real::from(digit)
+    })
 }
 
 /// All tokens in the `OpenSCAD` language.
+// Keeping `Real` inline makes the public token API mirror the exact-number AST
+// and avoids a second allocation for every numeric literal.
+#[allow(clippy::large_enum_variant)]
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t\r\n\x0c]+")]
 #[logos(skip r"//[^\n]*")]
@@ -111,7 +152,7 @@ pub enum Token {
     #[regex(r"0x[0-9a-fA-F]+", parse_hex)]
     #[regex(r"[0-9]+\.?[0-9]*([eE][+-]?[0-9]+)?", parse_number)]
     #[regex(r"\.[0-9]+([eE][+-]?[0-9]+)?", parse_number)]
-    Number(f64),
+    Number(Real),
 
     #[regex(r#""([^"\\]|\\.)*""#, parse_string)]
     String(String),

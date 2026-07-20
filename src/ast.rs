@@ -2,6 +2,7 @@
 ///
 /// Every node carries a [`Span`] for source-location mapping.
 use crate::span::Span;
+use hyperreal::Real;
 
 /// A complete `OpenSCAD` source file.
 #[derive(Debug, Clone, PartialEq)]
@@ -88,8 +89,8 @@ impl Expr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
-    /// Numeric literal
-    Number(f64),
+    /// Exact real numeric literal.
+    Number(Real),
     /// String literal (already unescaped)
     String(String),
     /// `true`

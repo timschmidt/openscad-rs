@@ -4,6 +4,7 @@
 //!
 //! Parses `.scad` source files into a well-typed AST suitable for
 //! building compilers, formatters, linters, and language servers.
+//! Numeric literals are represented directly as [`hyperreal::Real`] values.
 //!
 //! ## Quick Start
 //!

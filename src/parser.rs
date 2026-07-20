@@ -1234,9 +1234,10 @@ mod tests {
         match &file.statements[0] {
             Statement::Assignment { name, expr, .. } => {
                 assert_eq!(name, "x");
-                assert!(
-                    matches!(expr.kind, ExprKind::Number(n) if (n - 42.0).abs() < f64::EPSILON)
-                );
+                assert!(matches!(
+                    &expr.kind,
+                    ExprKind::Number(n) if n == &hyperreal::Real::from(42_u8)
+                ));
             }
             other => panic!("expected assignment, got {other:?}"),
         }

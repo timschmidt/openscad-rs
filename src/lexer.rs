@@ -52,6 +52,7 @@ pub fn extract_include_path(slice: &str) -> &str {
 mod tests {
     use super::*;
     use crate::token::Token;
+    use hyperreal::Real;
 
     #[test]
     fn test_basic_tokens() {
@@ -59,7 +60,7 @@ mod tests {
         assert_eq!(tokens.len(), 5);
         assert_eq!(tokens[0].0, Token::Identifier);
         assert_eq!(tokens[1].0, Token::LParen);
-        assert!(matches!(tokens[2].0, Token::Number(n) if (n - 10.0).abs() < f64::EPSILON));
+        assert!(matches!(&tokens[2].0, Token::Number(n) if n == &Real::from(10_u8)));
         assert_eq!(tokens[3].0, Token::RParen);
         assert_eq!(tokens[4].0, Token::Semicolon);
     }
@@ -87,21 +88,24 @@ mod tests {
 
     #[test]
     fn test_numbers() {
-        let tokens = lex("42 7.25 .5 1e10 2.5e-3 0xFF");
-        assert_eq!(tokens.len(), 6);
-        let nums: Vec<f64> = tokens
+        let tokens = lex("42 7.25 .5 1e10 2.5e-3 0xFF 1.e2 .5E+2 0x10000000000000000");
+        assert_eq!(tokens.len(), 9);
+        let nums: Vec<Real> = tokens
             .iter()
             .map(|(t, _)| match t {
-                Token::Number(n) => *n,
+                Token::Number(n) => n.clone(),
                 _ => panic!("expected number"),
             })
             .collect();
-        assert!((nums[0] - 42.0).abs() < f64::EPSILON);
-        assert!((nums[1] - 7.25).abs() < f64::EPSILON);
-        assert!((nums[2] - 0.5).abs() < f64::EPSILON);
-        assert!((nums[3] - 1e10).abs() < f64::EPSILON);
-        assert!((nums[4] - 2.5e-3).abs() < f64::EPSILON);
-        assert!((nums[5] - 255.0).abs() < f64::EPSILON);
+        assert_eq!(nums[0], Real::from(42_u8));
+        assert_eq!(nums[1], "29/4".parse::<Real>().unwrap());
+        assert_eq!(nums[2], "1/2".parse::<Real>().unwrap());
+        assert_eq!(nums[3], Real::from(10_000_000_000_u64));
+        assert_eq!(nums[4], "1/400".parse::<Real>().unwrap());
+        assert_eq!(nums[5], Real::from(255_u8));
+        assert_eq!(nums[6], Real::from(100_u8));
+        assert_eq!(nums[7], Real::from(50_u8));
+        assert_eq!(nums[8], Real::from(18_446_744_073_709_551_616_u128));
     }
 
     #[test]

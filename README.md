@@ -100,6 +100,10 @@ ranges, list comprehensions, assignments, user-defined functions and modules,
 child statements, modifiers, and `include`/`use` syntax. String escape handling
 and source locations are retained in the AST.
 
+Numeric tokens are parsed directly into `hyperreal::Real`. Integer, decimal,
+scientific-notation, and hexadecimal literals therefore retain exact rational
+meaning in the AST instead of first passing through `f64`.
+
 Parsing is intentionally syntactic. The crate does not resolve included files,
 evaluate expressions, type-check programs, or construct geometry. AST strings
 and expression boxes are owned; this favors a straightforward downstream API
