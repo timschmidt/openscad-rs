@@ -121,7 +121,13 @@ cargo fmt --all --check
 cargo test --all-targets
 cargo clippy --all-targets -- -D warnings
 cargo bench
+cargo check --manifest-path fuzz/Cargo.toml --bins --locked
 ```
+
+The lexer, exact numeric literals, parser diagnostics, AST invariants, and
+generated valid grammar have dedicated `cargo-fuzz` campaigns. See
+[fuzz/README.md](fuzz/README.md) for the target matrix and bounded nightly
+commands.
 
 To exercise the upstream fixtures and the command-line comparison benchmark:
 

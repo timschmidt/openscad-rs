@@ -1,5 +1,18 @@
 /target
 /vendor/
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/corpus/*
+!/fuzz/corpus/fuzz_lexer/
+!/fuzz/corpus/fuzz_parser/
+!/fuzz/corpus/fuzz_structured_parser/
+/fuzz/corpus/fuzz_lexer/*
+/fuzz/corpus/fuzz_parser/*
+/fuzz/corpus/fuzz_structured_parser/*
+!/fuzz/corpus/fuzz_lexer/comments_and_unicode.scad
+!/fuzz/corpus/fuzz_parser/modules_and_comprehensions.scad
+!/fuzz/corpus/fuzz_structured_parser/seed
 
 Cargo.lock
+!/fuzz/Cargo.lock
 .DS_Store

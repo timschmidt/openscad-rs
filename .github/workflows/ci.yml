@@ -35,6 +35,8 @@ jobs:
         run: cargo clippy -- -D warnings
       - name: Test
         run: cargo test
+      - name: Check fuzz targets
+        run: cargo check --manifest-path fuzz/Cargo.toml --bins --locked
 
   compat:
     name: OpenSCAD Compat

@@ -15,7 +15,10 @@ use crate::token::Token;
 /// # Errors
 /// Returns a `ParseError` if the source contains syntax errors.
 pub fn parse(source: &str) -> ParseResult<SourceFile> {
-    let tokens = lexer::lex(source);
+    let (tokens, errors) = lexer::lex_with_errors(source);
+    if let Some(span) = errors.first() {
+        return Err(ParseError::invalid_token(*span));
+    }
     let mut parser = Parser::new(source, tokens);
     parser.parse_file()
 }
@@ -266,16 +269,12 @@ impl<'src> Parser<'src> {
         self.expect(&Token::LParen)?;
         let params = self.parse_parameters()?;
         self.expect(&Token::RParen)?;
-        let body = self.parse_child_body()?;
-        let span = start.merge(
-            body.last()
-                .map_or_else(|| self.peek_span(), super::ast::Statement::span),
-        );
+        let (body, body_span) = self.parse_child_body()?;
         Ok(Statement::ModuleDefinition {
             name,
             params,
             body,
-            span: start.merge(span),
+            span: start.merge(body_span),
         })
     }
 
@@ -301,21 +300,18 @@ impl<'src> Parser<'src> {
         self.expect(&Token::LParen)?;
         let condition = self.parse_expr()?;
         self.expect(&Token::RParen)?;
-        let then_body = self.parse_child_body()?;
-        let else_body = if self.eat(&Token::Else).is_some() {
-            Some(self.parse_child_body()?)
+        let (then_body, then_span) = self.parse_child_body()?;
+        let (else_body, end_span) = if self.eat(&Token::Else).is_some() {
+            let (body, span) = self.parse_child_body()?;
+            (Some(body), span)
         } else {
-            None
+            (None, then_span)
         };
-        let end_span = else_body
-            .as_ref()
-            .and_then(|b| b.last().map(super::ast::Statement::span))
-            .or_else(|| then_body.last().map(super::ast::Statement::span))
-            .unwrap_or(start);
         Ok(Statement::IfElse {
             condition,
             then_body,
             else_body,
+            modifiers: Modifiers::default(),
             span: start.merge(end_span),
         })
     }
@@ -356,6 +352,7 @@ impl<'src> Parser<'src> {
                     condition,
                     then_body,
                     else_body,
+                    modifiers: _,
                     span,
                 } = stmt
             {
@@ -363,6 +360,7 @@ impl<'src> Parser<'src> {
                     condition,
                     then_body,
                     else_body,
+                    modifiers,
                     span: start_span.merge(span),
                 });
             }
@@ -374,10 +372,7 @@ impl<'src> Parser<'src> {
         let args = self.parse_arguments()?;
         self.expect(&Token::RParen)?;
 
-        let children = self.parse_child_body()?;
-        let end_span = children
-            .last()
-            .map_or_else(|| self.peek_span(), super::ast::Statement::span);
+        let (children, end_span) = self.parse_child_body()?;
 
         Ok(Statement::ModuleInstantiation {
             name,
@@ -411,24 +406,25 @@ impl<'src> Parser<'src> {
     }
 
     /// Parse `;`, a single child statement, or a braced child block.
-    fn parse_child_body(&mut self) -> ParseResult<Vec<Statement>> {
+    fn parse_child_body(&mut self) -> ParseResult<(Vec<Statement>, Span)> {
         match self.peek() {
             Some(Token::Semicolon) => {
-                self.advance();
-                Ok(vec![])
+                let span = self.advance().unwrap().1;
+                Ok((vec![], span))
             }
             Some(Token::LBrace) => {
-                self.advance(); // consume `{`
+                let start = self.advance().unwrap().1;
                 let mut body = Vec::new();
                 while self.peek() != Some(&Token::RBrace) && !self.at_end() {
                     body.push(self.parse_statement()?);
                 }
-                self.expect(&Token::RBrace)?;
-                Ok(body)
+                let end = self.expect(&Token::RBrace)?;
+                Ok((body, start.merge(end)))
             }
             _ => {
                 let stmt = self.parse_statement()?;
-                Ok(vec![stmt])
+                let span = stmt.span();
+                Ok((vec![stmt], span))
             }
         }
     }
@@ -595,7 +591,7 @@ impl<'src> Parser<'src> {
         let start = self.expect(&Token::Assert)?;
         self.expect(&Token::LParen)?;
         let args = self.parse_arguments()?;
-        self.expect(&Token::RParen)?;
+        let close = self.expect(&Token::RParen)?;
         let body = if !self.at_end()
             && !matches!(
                 self.peek(),
@@ -605,7 +601,7 @@ impl<'src> Parser<'src> {
         } else {
             None
         };
-        let end = body.as_ref().map_or(start, |b| b.span);
+        let end = body.as_ref().map_or(close, |b| b.span);
         Ok(Expr::new(ExprKind::Assert { args, body }, start.merge(end)))
     }
 
@@ -613,7 +609,7 @@ impl<'src> Parser<'src> {
         let start = self.expect(&Token::Echo)?;
         self.expect(&Token::LParen)?;
         let args = self.parse_arguments()?;
-        self.expect(&Token::RParen)?;
+        let close = self.expect(&Token::RParen)?;
         let body = if !self.at_end()
             && !matches!(
                 self.peek(),
@@ -623,7 +619,7 @@ impl<'src> Parser<'src> {
         } else {
             None
         };
-        let end = body.as_ref().map_or(start, |b| b.span);
+        let end = body.as_ref().map_or(close, |b| b.span);
         Ok(Expr::new(ExprKind::Echo { args, body }, start.merge(end)))
     }
 
@@ -856,8 +852,16 @@ impl<'src> Parser<'src> {
                 ))
             }
             Some(Token::Plus) => {
-                self.advance();
-                self.parse_unary()
+                let start = self.advance().unwrap().1;
+                let operand = self.parse_unary()?;
+                let span = start.merge(operand.span);
+                Ok(Expr::new(
+                    ExprKind::UnaryOp {
+                        op: UnaryOp::Plus,
+                        operand: Box::new(operand),
+                    },
+                    span,
+                ))
             }
             Some(Token::Bang) => {
                 let start = self.advance().unwrap().1;
@@ -991,9 +995,10 @@ impl<'src> Parser<'src> {
                 Ok(Expr::new(ExprKind::Identifier(name), span))
             }
             Some(Token::LParen) => {
-                self.advance();
-                let expr = self.parse_expr()?;
-                self.expect(&Token::RParen)?;
+                let start = self.advance().unwrap().1;
+                let mut expr = self.parse_expr()?;
+                let end = self.expect(&Token::RParen)?;
+                expr.span = start.merge(end);
                 Ok(expr)
             }
             Some(Token::LBracket) => self.parse_vector_or_range(),
@@ -1199,9 +1204,10 @@ impl<'src> Parser<'src> {
             )
         {
             // Parenthesized list comprehension: ( for(...) ... )
-            self.advance();
-            let inner = self.parse_list_comprehension_element()?;
-            self.expect(&Token::RParen)?;
+            let start = self.advance().unwrap().1;
+            let mut inner = self.parse_list_comprehension_element()?;
+            let end = self.expect(&Token::RParen)?;
+            inner.span = start.merge(end);
             Ok(inner)
         } else {
             self.parse_expr()
@@ -1336,6 +1342,65 @@ mod tests {
                 assert!(!modifiers.disable);
             }
             other => panic!("expected module instantiation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn statement_spans_end_at_their_own_empty_child_body() {
+        for source in [
+            "cube(); sphere();",
+            "module empty() {} cube();",
+            "if (true) {} else ; cube();",
+        ] {
+            let file = parse_ok(source);
+            assert_eq!(file.statements.len(), 2);
+            let first = file.statements[0].span();
+            let second = file.statements[1].span();
+            assert!(first.end <= second.start, "{first:?} overlaps {second:?}");
+            assert_eq!(&source[first.end..second.start], " ");
+        }
+    }
+
+    #[test]
+    fn modifiers_on_if_statements_are_preserved() {
+        let file = parse_ok("#!if (true) cube();");
+        match &file.statements[0] {
+            Statement::IfElse {
+                modifiers, span, ..
+            } => {
+                assert!(modifiers.highlight);
+                assert!(modifiers.root);
+                assert_eq!(
+                    &"#!if (true) cube();"[span.start..span.end],
+                    "#!if (true) cube();"
+                );
+            }
+            other => panic!("expected if/else, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unary_plus_and_delimiters_are_represented_in_expression_spans() {
+        let source = "x = +((value)); y = assert(true); z = echo(1);";
+        let file = parse_ok(source);
+
+        let Statement::Assignment { expr, .. } = &file.statements[0] else {
+            panic!("expected assignment");
+        };
+        assert!(matches!(
+            expr.kind,
+            ExprKind::UnaryOp {
+                op: UnaryOp::Plus,
+                ..
+            }
+        ));
+        assert_eq!(&source[expr.span.start..expr.span.end], "+((value))");
+
+        for (statement, expected) in file.statements[1..].iter().zip(["assert(true)", "echo(1)"]) {
+            let Statement::Assignment { expr, .. } = statement else {
+                panic!("expected assignment");
+            };
+            assert_eq!(&source[expr.span.start..expr.span.end], expected);
         }
     }
 
@@ -1480,6 +1545,18 @@ mod tests {
     fn test_error_missing_semicolon() {
         let err = parse_err("x = 42");
         assert!(matches!(err, ParseError::UnexpectedEof { .. }));
+    }
+
+    #[test]
+    fn invalid_tokens_are_not_silently_deleted() {
+        let err = parse_err("cube(@1);");
+        assert!(matches!(err, ParseError::InvalidToken { .. }));
+    }
+
+    #[test]
+    fn extreme_numeric_literals_remain_symbolic_instead_of_panicking() {
+        let source = format!("x = 1e{};", "9".repeat(400));
+        assert!(parse(&source).is_ok());
     }
 
     #[test]

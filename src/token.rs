@@ -60,8 +60,8 @@ fn parse_string(lex: &mut logos::Lexer<'_, Token>) -> String {
 }
 
 #[allow(clippy::needless_pass_by_ref_mut)] // Required by logos callback signature
-fn parse_number(lex: &mut logos::Lexer<'_, Token>) -> Real {
-    fn parse_mantissa(source: &str) -> Real {
+fn parse_number(lex: &mut logos::Lexer<'_, Token>) -> Result<Real, ()> {
+    fn parse_mantissa(source: &str) -> Result<Real, ()> {
         let normalized;
         let source = if source.starts_with('.') {
             normalized = format!("0{source}");
@@ -72,9 +72,7 @@ fn parse_number(lex: &mut logos::Lexer<'_, Token>) -> Real {
         } else {
             source
         };
-        source
-            .parse()
-            .expect("the numeric token regex accepts exact decimal literals")
+        source.parse().map_err(|_| ())
     }
 
     let source = lex.slice();
@@ -83,28 +81,26 @@ fn parse_number(lex: &mut logos::Lexer<'_, Token>) -> Real {
         return parse_mantissa(source);
     };
 
-    let mantissa = parse_mantissa(mantissa);
+    let mantissa = parse_mantissa(mantissa)?;
     let exponent = exponent.strip_prefix('+').unwrap_or(exponent);
-    let exponent: Real = exponent
-        .parse()
-        .expect("the numeric token regex accepts integer exponents");
-    let scale = Real::from(10_u8)
-        .pow(exponent)
-        .expect("ten raised to an integer exponent is a real number");
-    mantissa * scale
+    let exponent: Real = exponent.parse().map_err(|_| ())?;
+    let scale = Real::from(10_u8).pow(exponent).map_err(|_| ())?;
+    Ok(mantissa * scale)
 }
 
 #[allow(clippy::needless_pass_by_ref_mut)] // Required by logos callback signature
-fn parse_hex(lex: &mut logos::Lexer<'_, Token>) -> Real {
-    lex.slice()[2..].bytes().fold(Real::zero(), |value, digit| {
-        let digit = match digit {
-            b'0'..=b'9' => digit - b'0',
-            b'a'..=b'f' => digit - b'a' + 10,
-            b'A'..=b'F' => digit - b'A' + 10,
-            _ => unreachable!("the hexadecimal token regex accepts only hexadecimal digits"),
-        };
-        value * Real::from(16_u8) + Real::from(digit)
-    })
+fn parse_hex(lex: &mut logos::Lexer<'_, Token>) -> Option<Real> {
+    lex.slice()[2..]
+        .bytes()
+        .try_fold(Real::zero(), |value, digit| {
+            let digit = match digit {
+                b'0'..=b'9' => digit - b'0',
+                b'a'..=b'f' => digit - b'a' + 10,
+                b'A'..=b'F' => digit - b'A' + 10,
+                _ => return None,
+            };
+            Some(value * Real::from(16_u8) + Real::from(digit))
+        })
 }
 
 /// All tokens in the `OpenSCAD` language.

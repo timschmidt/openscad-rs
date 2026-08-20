@@ -42,6 +42,7 @@ pub fn lex_with_errors(source: &str) -> (Vec<SpannedToken>, Vec<Span>) {
 pub fn extract_include_path(slice: &str) -> &str {
     if let Some(start) = slice.find('<')
         && let Some(end) = slice.rfind('>')
+        && start < end
     {
         return &slice[start + 1..end];
     }
@@ -166,6 +167,7 @@ mod tests {
             "foo/bar.scad"
         );
         assert_eq!(extract_include_path("use <lib.scad>"), "lib.scad");
+        assert_eq!(extract_include_path("> malformed <"), "> malformed <");
     }
 
     #[test]

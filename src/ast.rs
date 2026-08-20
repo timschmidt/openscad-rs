@@ -51,6 +51,7 @@ pub enum Statement {
         condition: Expr,
         then_body: Vec<Self>,
         else_body: Option<Vec<Self>>,
+        modifiers: Modifiers,
         span: Span,
     },
     /// A bare block `{ ... }` (rare but valid)

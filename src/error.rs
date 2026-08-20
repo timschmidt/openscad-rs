@@ -60,6 +60,13 @@ impl ParseError {
             span: (span.start, span.len()).into(),
         }
     }
+
+    #[must_use]
+    pub fn invalid_token(span: Span) -> Self {
+        Self::InvalidToken {
+            span: (span.start, span.len()).into(),
+        }
+    }
 }
 
 /// Result type alias for parser operations.

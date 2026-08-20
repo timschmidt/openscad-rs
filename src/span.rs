@@ -37,7 +37,7 @@ impl Span {
     /// Return the length of this span in bytes.
     #[must_use]
     pub const fn len(self) -> usize {
-        self.end - self.start
+        self.end.saturating_sub(self.start)
     }
 
     /// Return whether this span contains no bytes.
@@ -56,5 +56,15 @@ impl From<logos::Span> for Span {
             start: span.start,
             end: span.end,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Span;
+
+    #[test]
+    fn malformed_public_spans_do_not_overflow_when_measured() {
+        assert_eq!(Span::new(9, 3).len(), 0);
     }
 }
