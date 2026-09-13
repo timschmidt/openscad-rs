@@ -61,31 +61,7 @@ fn parse_string(lex: &mut logos::Lexer<'_, Token>) -> String {
 
 #[allow(clippy::needless_pass_by_ref_mut)] // Required by logos callback signature
 fn parse_number(lex: &mut logos::Lexer<'_, Token>) -> Result<Real, ()> {
-    fn parse_mantissa(source: &str) -> Result<Real, ()> {
-        let normalized;
-        let source = if source.starts_with('.') {
-            normalized = format!("0{source}");
-            &normalized
-        } else if source.ends_with('.') {
-            normalized = format!("{source}0");
-            &normalized
-        } else {
-            source
-        };
-        source.parse().map_err(|_| ())
-    }
-
-    let source = lex.slice();
-    let Some((mantissa, exponent)) = source.split_once('e').or_else(|| source.split_once('E'))
-    else {
-        return parse_mantissa(source);
-    };
-
-    let mantissa = parse_mantissa(mantissa)?;
-    let exponent = exponent.strip_prefix('+').unwrap_or(exponent);
-    let exponent: Real = exponent.parse().map_err(|_| ())?;
-    let scale = Real::from(10_u8).pow(exponent).map_err(|_| ())?;
-    Ok(mantissa * scale)
+    lex.slice().parse().map_err(|_| ())
 }
 
 #[allow(clippy::needless_pass_by_ref_mut)] // Required by logos callback signature
