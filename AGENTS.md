@@ -48,9 +48,12 @@ comparison. Every difference is triaged and published, not silently absorbed.
 
 ### Building
 
-`Cargo.toml` takes `hyperreal` from `../hyperreal` at version 0.13.1. The csgrs
-monorepo keeps hyperreal at `crates/hyperreal`, at version 0.14.0, and
-crates.io has 0.13.0. So neither CI nor a plain checkout beside csgrs can
-resolve the dependency, and CI has failed on that since 2026-10-05. Choosing how
-this crate takes hyperreal (published version, git dependency or a sibling
-path) is a maintainer decision.
+`hyperreal` comes from the csgrs monorepo, which is checked out as a sibling:
+`../csgrs/crates/hyperreal`, version 0.14.0. CI fetches csgrs into `../csgrs` at
+a pinned commit, `e83de9ee8c` (csgrs `main`). Move the pin when this crate needs
+a newer hyperreal, and update `fuzz/Cargo.lock` in the same change.
+
+`zizmor --pedantic --strict-collection .` also scans the vendored OpenSCAD
+submodule's own workflows, which report about 150 upstream findings. To audit
+this repository's CI, run `zizmor --pedantic --strict-collection .github`; it
+must report no findings.

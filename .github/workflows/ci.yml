@@ -24,6 +24,15 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Fetch the pinned csgrs monorepo
+        # hyperreal is a path dependency on the sibling csgrs monorepo.
+        run: |
+          set -euo pipefail
+          destination="${GITHUB_WORKSPACE}/../csgrs"
+          git init "${destination}"
+          git -C "${destination}" remote add origin https://github.com/timschmidt/csgrs.git
+          git -C "${destination}" fetch --depth 1 origin e83de9ee8c8fc368f0edd9789300c533fdeefbfd
+          git -C "${destination}" checkout --detach FETCH_HEAD
       - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
@@ -46,6 +55,15 @@ jobs:
         with:
           submodules: true
           persist-credentials: false
+      - name: Fetch the pinned csgrs monorepo
+        # hyperreal is a path dependency on the sibling csgrs monorepo.
+        run: |
+          set -euo pipefail
+          destination="${GITHUB_WORKSPACE}/../csgrs"
+          git init "${destination}"
+          git -C "${destination}" remote add origin https://github.com/timschmidt/csgrs.git
+          git -C "${destination}" fetch --depth 1 origin e83de9ee8c8fc368f0edd9789300c533fdeefbfd
+          git -C "${destination}" checkout --detach FETCH_HEAD
       - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal
