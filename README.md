@@ -109,10 +109,17 @@ evaluate expressions, type-check programs, or construct geometry. AST strings
 and expression boxes are owned; this favors a straightforward downstream API
 over arena allocation or a fully zero-copy tree.
 
-An optional compatibility test runs against the vendored upstream OpenSCAD
-fixture corpus. That corpus also contains experimental and deliberately invalid
-inputs, so the test enforces a regression floor rather than claiming universal
-language acceptance.
+A compatibility test parses the upstream OpenSCAD fixture corpus, pinned as
+the `vendor/openscad` submodule. At the pinned revision, 513 of its 524 files
+parse. Five of the other eleven are inputs that OpenSCAD itself rejects. The
+remaining six are known gaps:
+- a backslash-newline continuation inside a string;
+- no-break spaces used as whitespace;
+- Unicode identifiers with NFC normalization.
+
+The test is a ratchet. `tests/openscad_compat_passing.txt` lists exactly the
+files that parse, and the test fails if one of them regresses or if a new file
+starts parsing without being recorded.
 
 ## Development
 
