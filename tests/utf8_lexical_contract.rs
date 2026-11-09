@@ -218,3 +218,23 @@ fn pinned_identifier_profile_and_malformed_strings_still_fail_typed() {
     // Existing ASCII and legacy digit-leading identifiers remain admitted.
     assert!(parse("_name=1; $name=2; 3dName=3;").is_ok());
 }
+
+#[test]
+fn unicode_escape_boundaries_use_the_pinned_space_convention() {
+    let actual = [
+        r#""before\uD800after""#,
+        r#""before\uDFFFafter""#,
+        r#""before\U110000after""#,
+        r#""before\UFFFFFFafter""#,
+        r#""before\u0000after""#,
+    ]
+    .map(string_value);
+    assert_eq!(actual, ["before after"; 5]);
+    assert_eq!(string_value(r#""\U10FFFF""#), "\u{10ffff}");
+    assert_eq!(string_value(r#""\uFFFF""#), "\u{ffff}");
+}
+
+#[test]
+fn literal_crlf_keeps_its_carriage_return_and_original_source_span() {
+    assert_eq!(string_value("\"before\r\nafter\""), "before\rafter");
+}
