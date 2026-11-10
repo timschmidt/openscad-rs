@@ -14,9 +14,15 @@ exclude = ["vendor/", "benches/", "tests/", "target/", ".github/", ".claude/"]
 
 [dependencies]
 hyperreal = { version = "0.14.0", path = "../csgrs/crates/hyperreal" }
-logos = "0.15"
+# Unicode token alternatives need the corrected fallback semantics; checked
+# code generation also keeps source slicing on valid UTF8 boundaries.
+logos = { version = "0.16.1", features = ["forbid_unsafe"] }
 miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
+# Match the pinned OpenSCAD Unicode16 identifier and normalization data.
+unicode-normalization = "=0.1.24"
+unicode-security = "=0.1.2"
+unicode-xid = "=0.2.6"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

@@ -33,12 +33,16 @@ corpus files.
 | --- | --- |
 | `issues/issue1890-{comment,include,string,use}.scad` | Deliberately invalid: in upstream's `FAILING_FILES` |
 | `misc/unicode-identifiers-fail.scad` | Deliberately invalid: upstream expects a parser error |
-| `issues/issue6942.scad` | Gap: backslash-newline continuation inside a string |
-| `misc/no-break-space-test.scad`, `misc/nbsp-utf8-test.scad`, `misc/nbsp-latin1-test.scad` | Gap: no-break space as whitespace |
-| `misc/unicode-identifiers.scad`, `customizer/unicode-identifiers-parameters.scad` | Gap: Unicode identifiers normalized to NFC |
+| `misc/nbsp-latin1-test.scad` | Encoding gap: the parser API accepts UTF-8 source |
 
 If a deliberately invalid file ever starts parsing, the ratchet reports it as
 newly passing. That is a regression, not a fix.
+
+The ratchet records 518 passing files. UTF-8 no-break spaces, string line
+continuations and Unicode identifiers are supported. `src/identifier.rs`
+owns the pinned Unicode 16 NFC and UTS39/XID profile. Normalize AST names only;
+retain original byte spans, string payloads and include/use paths. Unicode-data
+changes require a deliberate language-contract review and corresponding tests.
 
 ### Downstream
 

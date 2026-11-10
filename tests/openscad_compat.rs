@@ -176,3 +176,116 @@ fn run_compat_tests() {
         problems.join("\n")
     );
 }
+
+fn identifier_ranges(header: &str, name: &str) -> Vec<(u32, u32)> {
+    let marker = format!("Range {name}[] = {{");
+    let (_, rest) = header
+        .split_once(&marker)
+        .expect("pinned range declaration");
+    let (body, _) = rest.split_once("};").expect("closed pinned range table");
+    let ranges: Vec<_> = body
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let pair = line.trim().strip_prefix('{').expect("range opening brace");
+            let pair = pair
+                .trim_end_matches(',')
+                .strip_suffix('}')
+                .expect("range closing brace");
+            let (first, last) = pair.split_once(',').expect("range pair");
+            let code = |text: &str| {
+                u32::from_str_radix(
+                    text.trim().strip_prefix("0x").expect("hexadecimal bound"),
+                    16,
+                )
+                .expect("valid code point")
+            };
+            let range = (code(first), code(last));
+            assert!(range.0 >= 128 && range.0 <= range.1 && range.1 <= 0x10_ffff);
+            range
+        })
+        .collect();
+    assert_ne!(ranges, Vec::<(u32, u32)>::new());
+    assert!(ranges.windows(2).all(|pair| pair[0].1 < pair[1].0));
+    ranges
+}
+
+fn in_identifier_ranges(character: char, ranges: &[(u32, u32)]) -> bool {
+    let code = u32::from(character);
+    let upper = ranges.partition_point(|(first, _)| *first <= code);
+    upper
+        .checked_sub(1)
+        .is_some_and(|index| code <= ranges[index].1)
+}
+
+#[test]
+fn unicode_identifier_profile_matches_the_pinned_language() {
+    use openscad_rs::{Span, lexer::lex_with_errors, token::Token};
+    use unicode_normalization::UnicodeNormalization;
+
+    if !corpus_dir().exists() {
+        assert!(
+            std::env::var_os("OPENSCAD_COMPAT_REQUIRED").is_none(),
+            "required corpus missing"
+        );
+        eprintln!("Skipping pinned Unicode profile without the OpenSCAD submodule");
+        return;
+    }
+    let path = manifest_dir().join("vendor/openscad/src/core/UnicodeIdentifierTables.h");
+    let header = std::fs::read_to_string(path).expect("pinned upstream identifier tables");
+    assert!(header.contains("UNICODE_VERSION[] = \"16.0.0\""));
+    let starts = identifier_ranges(&header, "ID_START");
+    let continues = identifier_ranges(&header, "ID_CONTINUE");
+    let expected_name = |name: &str| {
+        let mut normalized = name.nfc();
+        let start = normalized.next().expect("nonempty two-character input");
+        let first = if start.is_ascii() {
+            start.is_ascii_alphabetic() || matches!(start, '_' | '$')
+        } else {
+            in_identifier_ranges(start, &starts)
+        };
+        first
+            && normalized.all(|character| {
+                if character.is_ascii() {
+                    character.is_ascii_alphanumeric() || character == '_'
+                } else {
+                    in_identifier_ranges(character, &continues)
+                }
+            })
+    };
+
+    let mut checked = 0_u32;
+    for code in 128..=0x10_ffff {
+        let Some(character) = char::from_u32(code) else {
+            continue;
+        };
+        // These two characters deliberately break tokens as whitespace.
+        // Their behavior and original byte spans have separate witnesses.
+        if matches!(character, '\u{a0}' | '\u{feff}') {
+            continue;
+        }
+        for name in [format!("{character}a"), format!("a{character}")] {
+            let expected = expected_name(&name);
+            let (tokens, errors) = lex_with_errors(&name);
+            let admitted =
+                errors.is_empty() && matches!(tokens.as_slice(), [(Token::Identifier, _)]);
+            assert_eq!(
+                admitted, expected,
+                "profile mismatch for {name:?} (U+{code:04X})"
+            );
+            if expected {
+                assert_eq!(tokens[0].1, Span::new(0, name.len()));
+            } else {
+                assert!(
+                    !errors.is_empty(),
+                    "invalid identifier needs a typed lexer error: {name:?}"
+                );
+            }
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 2_223_868);
+    println!(
+        "Verified {checked} non-ASCII start/continue inputs against pinned Unicode16 profile tables and original byte spans."
+    );
+}

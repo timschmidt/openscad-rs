@@ -6,6 +6,7 @@ use crate::ast::{
     Argument, BinaryOp, Expr, ExprKind, Modifiers, Parameter, SourceFile, Statement, UnaryOp,
 };
 use crate::error::{ParseError, ParseResult};
+use crate::identifier::normalized_identifier;
 use crate::lexer::{self, SpannedToken};
 use crate::span::Span;
 use crate::token::Token;
@@ -118,7 +119,7 @@ impl<'src> Parser<'src> {
         match self.peek() {
             Some(Token::Identifier) => {
                 let (_, span) = self.advance().unwrap();
-                Ok((self.slice(span).to_string(), span))
+                Ok((normalized_identifier(self.slice(span)), span))
             }
             // `for`, `let`, `each`, `assert`, `echo` are valid identifiers in module_id context
             Some(Token::For | Token::Let | Token::Each | Token::Assert | Token::Echo) => {
@@ -991,7 +992,7 @@ impl<'src> Parser<'src> {
             }
             Some(Token::Identifier) => {
                 let (_, span) = self.advance().unwrap();
-                let name = self.slice(span).to_string();
+                let name = normalized_identifier(self.slice(span));
                 Ok(Expr::new(ExprKind::Identifier(name), span))
             }
             Some(Token::LParen) => {
@@ -1230,7 +1231,7 @@ mod tests {
     #[test]
     fn test_empty() {
         let file = parse_ok("");
-        assert!(file.statements.is_empty());
+        assert_eq!(file.statements, Vec::<Statement>::new());
     }
 
     #[test]

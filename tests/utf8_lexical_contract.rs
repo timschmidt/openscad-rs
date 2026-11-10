@@ -82,9 +82,9 @@ fn breaking_unicode_spaces_preserve_numeric_values_and_source_spans() {
 fn canonical_identifier_spellings_share_names_without_normalizing_source() {
     for (raw, expected) in [
         ("ho\u{308}he", "höhe"),
-        ("Ω", "Ω"),
-        ("K", "K"),
-        ("Å", "Å"),
+        ("\u{2126}", "Ω"),
+        ("\u{212a}", "K"),
+        ("\u{212b}", "Å"),
         ("\u{1100}\u{1161}", "가"),
         ("寸法", "寸法"),
     ] {
@@ -237,4 +237,42 @@ fn unicode_escape_boundaries_use_the_pinned_space_convention() {
 #[test]
 fn literal_crlf_keeps_its_carriage_return_and_original_source_span() {
     assert_eq!(string_value("\"before\r\nafter\""), "before\rafter");
+}
+
+#[test]
+fn unicode_breaking_spaces_end_tokens_at_valid_source_boundaries() {
+    let sources = [
+        "\u{a0}",
+        "\u{feff}",
+        "a\u{a0}=1;",
+        "a\u{feff}=1;",
+        "α\u{a0}β",
+        "a\u{a0}b",
+        "a\u{feff}b",
+    ];
+    let observations: Vec<_> = sources
+        .into_iter()
+        .map(|source| {
+            let (tokens, errors) = lex_with_errors(source);
+            println!("{source:?}: tokens={tokens:?}, errors={errors:?}");
+            (source, tokens, errors)
+        })
+        .collect();
+    for (source, tokens, errors) in observations {
+        assert!(errors.is_empty(), "{source:?}: {errors:?}");
+        for (_, span) in tokens {
+            assert!(source.is_char_boundary(span.start) && source.is_char_boundary(span.end));
+        }
+    }
+    for source in ["α\u{a0}β", "a\u{a0}b", "a\u{feff}b"] {
+        let (tokens, _) = lex_with_errors(source);
+        assert!(matches!(
+            tokens.as_slice(),
+            [(Token::Identifier, _), (Token::Identifier, _)]
+        ));
+        assert!(
+            parse(&format!("{source}=1;")).is_err(),
+            "whitespace must not join names"
+        );
+    }
 }

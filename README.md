@@ -100,6 +100,12 @@ ranges, list comprehensions, assignments, user-defined functions and modules,
 child statements, modifiers, and `include`/`use` syntax. String escape handling
 and source locations are retained in the AST.
 
+Identifiers use the pinned OpenSCAD Unicode 16 profile and normalize to NFC
+in AST names. Source spans still refer to the original UTF-8 bytes; string
+payloads and include/use paths are not identifier-normalized. UTF-8 no-break
+spaces are recognized as whitespace, and strings support backslash-newline
+continuations, including CRLF.
+
 Numeric tokens are parsed directly into `hyperreal::Real`. Integer, decimal,
 scientific-notation, and hexadecimal literals therefore retain exact rational
 meaning in the AST instead of first passing through `f64`.
@@ -110,12 +116,10 @@ and expression boxes are owned; this favors a straightforward downstream API
 over arena allocation or a fully zero-copy tree.
 
 A compatibility test parses the upstream OpenSCAD fixture corpus, pinned as
-the `vendor/openscad` submodule. At the pinned revision, 513 of its 524 files
-parse. Five of the other eleven are inputs that OpenSCAD itself rejects. The
-remaining six are known gaps:
-- a backslash-newline continuation inside a string;
-- no-break spaces used as whitespace;
-- Unicode identifiers with NFC normalization.
+the `vendor/openscad` submodule. At the pinned revision, 518 of its 524 files
+parse. Five of the other six are inputs that OpenSCAD itself rejects. The
+remaining Latin-1 no-break-space fixture is an encoding gap; the parser API
+accepts UTF-8 source.
 
 The test is a ratchet. `tests/openscad_compat_passing.txt` lists exactly the
 files that parse, and the test fails if one of them regresses or if a new file

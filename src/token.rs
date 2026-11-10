@@ -11,52 +11,63 @@ fn parse_string(lex: &mut logos::Lexer<'_, Token>) -> String {
     // Strip surrounding quotes
     let inner = &slice[1..slice.len() - 1];
     let mut result = String::with_capacity(inner.len());
-    let mut chars = inner.chars();
+    let mut chars = inner.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '\\' {
-            match chars.next() {
-                Some('n') => result.push('\n'),
-                Some('t') => result.push('\t'),
-                Some('r') => result.push('\r'),
-                Some('\\') | None => result.push('\\'),
-                Some('"') => result.push('"'),
-                Some('x') => {
-                    let hex: String = chars.by_ref().take(2).collect();
-                    if let Ok(val) = u32::from_str_radix(&hex, 16) {
-                        if val == 0 {
-                            result.push(' ');
-                        } else if let Some(ch) = char::from_u32(val) {
-                            result.push(ch);
+            match chars.peek().copied() {
+                Some(escape @ ('n' | 't' | 'r' | '\\' | '"')) => {
+                    chars.next();
+                    result.push(match escape {
+                        'n' => '\n',
+                        't' => '\t',
+                        'r' => '\r',
+                        other => other,
+                    });
+                }
+                Some('\n') => {
+                    chars.next();
+                }
+                Some('\r') => {
+                    if chars.clone().nth(1) == Some('\n') {
+                        chars.next();
+                        chars.next();
+                    }
+                }
+                Some(prefix @ ('x' | 'u' | 'U')) => {
+                    let digits = match prefix {
+                        'x' => 2,
+                        'u' => 4,
+                        _ => 6,
+                    };
+                    let hex: String = chars.clone().skip(1).take(digits).collect();
+                    if hex.len() == digits
+                        && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+                        && (prefix != 'x' || hex.as_bytes()[0] <= b'7')
+                    {
+                        // At most six validated ASCII hex digits fit in u32.
+                        let value = u32::from_str_radix(&hex, 16).unwrap();
+                        for _ in 0..=digits {
+                            chars.next();
                         }
+                        // This is the pinned language's defined escape value,
+                        // including zero and non-scalar Unicode code points.
+                        result.push(char::from_u32(value).filter(|c| *c != '\0').unwrap_or(' '));
                     }
                 }
-                Some('u') => {
-                    let hex: String = chars.by_ref().take(4).collect();
-                    if let Ok(val) = u32::from_str_radix(&hex, 16)
-                        && let Some(ch) = char::from_u32(val)
-                    {
-                        result.push(ch);
-                    }
-                }
-                Some('U') => {
-                    let hex: String = chars.by_ref().take(6).collect();
-                    if let Ok(val) = u32::from_str_radix(&hex, 16)
-                        && let Some(ch) = char::from_u32(val)
-                    {
-                        result.push(ch);
-                    }
-                }
-                // Unknown escape — keep backslash + char (OpenSCAD warns but continues)
-                Some(other) => {
-                    result.push('\\');
-                    result.push(other);
-                }
+                // Upstream discards an unknown backslash. Leave the following
+                // characters unconsumed so their literal values are retained.
+                _ => {}
             }
-        } else {
+        } else if c != '\n' {
             result.push(c);
         }
     }
     result
+}
+
+#[allow(clippy::needless_pass_by_ref_mut)] // Required by logos callback signature
+fn parse_unicode_identifier(lex: &mut logos::Lexer<'_, Token>) -> bool {
+    crate::identifier::unicode_identifier_is_valid(lex.slice())
 }
 
 #[allow(clippy::needless_pass_by_ref_mut)] // Required by logos callback signature
@@ -84,8 +95,8 @@ fn parse_hex(lex: &mut logos::Lexer<'_, Token>) -> Option<Real> {
 // and avoids a second allocation for every numeric literal.
 #[allow(clippy::large_enum_variant)]
 #[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ \t\r\n\x0c]+")]
-#[logos(skip r"//[^\n]*")]
+#[logos(skip r"[ \t\r\n\x0c\u{00A0}\u{FEFF}]+")]
+#[logos(skip(r"//[^\n]*", allow_greedy = true))]
 #[logos(skip r"/\*([^*]|\*[^/])*\*/")]
 pub enum Token {
     // ── Keywords ──────────────────────────────────────────────
@@ -126,12 +137,16 @@ pub enum Token {
     #[regex(r"\.[0-9]+([eE][+-]?[0-9]+)?", parse_number)]
     Number(Real),
 
-    #[regex(r#""([^"\\]|\\.)*""#, parse_string)]
+    #[regex(r#""([^"\\]|\\(?s:.))*""#, parse_string)]
     String(String),
 
     // ── Identifiers ──────────────────────────────────────────
     #[regex(r"[a-zA-Z_$][a-zA-Z0-9_]*")]
     #[regex(r"[0-9]+[a-zA-Z_][a-zA-Z0-9_]*", priority = 1)]
+    #[regex(
+        r"([a-zA-Z_$][a-zA-Z0-9_]*)?[^\x00-\x7F\u{00A0}\u{FEFF}]([a-zA-Z0-9_]|[^\x00-\x7F\u{00A0}\u{FEFF}])*",
+        parse_unicode_identifier
+    )]
     Identifier,
 
     // ── Multi-char operators ─────────────────────────────────

@@ -256,6 +256,7 @@ customizer/description.scad
 customizer/group.scad
 customizer/parameter.scad
 customizer/setofparameter.scad
+customizer/unicode-identifiers-parameters.scad
 dxf/arc.scad
 dxf/circle-advanced.scad
 dxf/circle-double.scad
@@ -338,6 +339,7 @@ issues/issue3118-recur-limit.scad
 issues/issue3541.scad
 issues/issue4172-echo-vector-stack-exhaust.scad
 issues/issue6597.scad
+issues/issue6942.scad
 issues/issue7013.scad
 json/import-json-relative-path.scad
 json/import-json.scad
@@ -405,6 +407,8 @@ misc/linenumber.scad
 misc/localfiles-test.scad
 misc/localfiles_dir/localfiles_module.scad
 misc/lookup-tests.scad
+misc/nbsp-utf8-test.scad
+misc/no-break-space-test.scad
 misc/nonmanifold-polyhedron.scad
 misc/normal-nan.scad
 misc/operators-tests.scad
@@ -448,6 +452,7 @@ misc/sub2/useuse.scad
 misc/tail-recursion-tests.scad
 misc/test-view-variables.scad
 misc/text-metrics-test.scad
+misc/unicode-identifiers.scad
 misc/unicode-tests.scad
 misc/use test6.scad
 misc/use-test5.scad
